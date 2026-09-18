@@ -1,0 +1,152 @@
+{
+	"name": "tmux-restore-workspace",
+	"displayName": "Tmux Restore Workspace",
+	"description": "Restore only tmux sessions belonging to the current workspace.",
+	"version": "1.0.0",
+	"publisher": "local",
+	"author": {
+		"name": "JiangJie Zhang",
+		"url": "https://github.com/yJader"
+	},
+	"contributors": [{ "name": "FFD" }],
+	"repository": { "type": "git", "url": "https://github.com/yJader/tmux-restore-workspace.git" },
+	"homepage": "https://github.com/yJader/tmux-restore-workspace#readme",
+	"bugs": { "url": "https://github.com/yJader/tmux-restore-workspace/issues" },
+	"license": "MIT",
+	"pricing": "Free",
+	"engines": {
+		"vscode": "^1.85.0"
+	},
+	"categories": [
+		"Other"
+	],
+	"keywords": [
+		"tmux",
+		"terminal",
+		"session",
+		"sidebar",
+		"restore",
+		"remote-ssh",
+		"persistent terminal"
+	],
+	"extensionKind": [
+		"workspace"
+	],
+	"activationEvents": [
+		"onStartupFinished",
+		"onCommand:tmuxRestoreWorkspace.openAll"
+	],
+	"main": "./extension.js",
+	"scripts": {
+		"test": "node --test test/*.test.js",
+		"package": "npx @vscode/vsce package --out tmux-restore-workspace-1.0.0.vsix"
+	},
+	"contributes": {
+		"commands": [
+			{
+				"command": "tmuxRestoreWorkspace.openAll",
+				"title": "Restore Workspace Sessions",
+				"category": "Tmux Workspace",
+				"icon": "$(terminal-new)"
+			},
+			{
+				"command": "tmuxRestoreWorkspace.openSession",
+				"title": "Open Session",
+				"category": "Tmux"
+			},
+			{
+				"command": "tmuxRestoreWorkspace.renameSession",
+				"title": "Rename Session",
+				"category": "Tmux",
+				"icon": "$(edit)"
+			},
+			{
+				"command": "tmuxRestoreWorkspace.killSession",
+				"title": "Kill Session",
+				"category": "Tmux",
+				"icon": "$(trash)"
+			},
+			{
+				"command": "tmuxRestoreWorkspace.refresh",
+				"title": "Refresh Sessions",
+				"category": "Tmux",
+				"icon": "$(refresh)"
+			}
+		],
+		"viewsContainers": {
+			"activitybar": [
+				{
+					"id": "tmuxRestoreWorkspace",
+					"title": "Tmux Workspace",
+					"icon": "media/tmux.svg"
+				}
+			]
+		},
+		"views": {
+			"tmuxRestoreWorkspace": [
+				{
+					"id": "tmuxRestoreWorkspace.sessions",
+					"name": "Workspace Sessions"
+				}
+			]
+		},
+		"viewsWelcome": [
+			{
+				"view": "tmuxRestoreWorkspace.sessions",
+				"contents": "No tmux sessions belong to this workspace.\n[Refresh sessions](command:tmuxRestoreWorkspace.refresh)"
+			}
+		],
+		"menus": {
+			"commandPalette": [
+				{
+					"command": "tmuxRestoreWorkspace.openSession",
+					"when": "false"
+				},
+				{
+					"command": "tmuxRestoreWorkspace.renameSession",
+					"when": "false"
+				},
+				{
+					"command": "tmuxRestoreWorkspace.killSession",
+					"when": "false"
+				}
+			],
+			"view/title": [
+				{
+					"command": "tmuxRestoreWorkspace.openAll",
+					"when": "view == tmuxRestoreWorkspace.sessions",
+					"group": "navigation@1"
+				},
+				{
+					"command": "tmuxRestoreWorkspace.refresh",
+					"when": "view == tmuxRestoreWorkspace.sessions",
+					"group": "navigation@2"
+				}
+			],
+			"view/item/context": [
+				{
+					"command": "tmuxRestoreWorkspace.openSession",
+					"when": "view == tmuxRestoreWorkspace.sessions && viewItem == tmuxSession",
+					"group": "inline"
+				},
+				{
+					"command": "tmuxRestoreWorkspace.renameSession",
+					"when": "view == tmuxRestoreWorkspace.sessions && viewItem == tmuxSession",
+					"group": "inline@1"
+				},
+				{
+					"command": "tmuxRestoreWorkspace.killSession",
+					"when": "view == tmuxRestoreWorkspace.sessions && viewItem == tmuxSession",
+					"group": "inline@2"
+				}
+			]
+		},
+		"keybindings": [
+			{
+				"command": "tmuxRestoreWorkspace.openAll",
+				"key": "ctrl+alt+r",
+				"mac": "cmd+alt+r"
+			}
+		]
+	}
+}

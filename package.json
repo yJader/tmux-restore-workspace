@@ -2,8 +2,8 @@
 	"name": "tmux-restore-workspace",
 	"displayName": "Tmux Restore Workspace",
 	"description": "Restore only tmux sessions belonging to the current workspace.",
-	"version": "1.0.0",
-	"publisher": "local",
+	"version": "1.0.1",
+	"publisher": "jader",
 	"author": {
 		"name": "JiangJie Zhang",
 		"url": "https://github.com/yJader"
@@ -39,7 +39,7 @@
 	"main": "./extension.js",
 	"scripts": {
 		"test": "node --test test/*.test.js",
-		"package": "npx @vscode/vsce package --out tmux-restore-workspace-1.0.0.vsix"
+		"package": "npx @vscode/vsce package"
 	},
 	"contributes": {
 		"commands": [

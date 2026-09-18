@@ -15,13 +15,15 @@
 
 要求 VS Code 1.85+，工作区主机已安装 tmux 并可通过 `PATH` 找到。
 
-1. 停用原插件 `FFDFFD.tmux-restore-all`。
+1. 停用原插件 `FFDFFD.tmux-restore-all`；若装过本地版 `local.tmux-restore-workspace`，也需卸载或停用。
 2. 从 [GitHub Releases](https://github.com/yJader/tmux-restore-workspace/releases) 下载 VSIX，通过 **Install from VSIX...** 安装，然后重新加载窗口。
 3. 打开项目即可自动恢复，或执行 `Tmux Workspace: Restore Workspace Sessions`。
 
 快捷键：macOS 为 `Cmd+Alt+R`，其他平台为 `Ctrl+Alt+R`。
 
 Remote SSH 需在对应远端安装本插件并停用原版。
+
+正式插件 ID：`jader.tmux-restore-workspace`。
 
 ## 注意
 

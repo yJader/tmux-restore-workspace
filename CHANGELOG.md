@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.1 - 2026-09-18
+
+- 将 publisher 从本地开发标识 `local` 改为实际发布者 `jader`，修复 Marketplace 上传时的发布者不匹配错误。
+- 插件 ID 改为 `jader.tmux-restore-workspace`；安装前需停用或卸载旧的 `local` 版本。
+- 打包文件名自动跟随版本号，功能保持不变。
+
 ## 1.0.0 - 2026-09-18
 
 基于 [Tmux Restore All 1.2.0](https://marketplace.visualstudio.com/items?itemName=FFDFFD.tmux-restore-all)（FFDFFD / FFD）的独立维护版本。

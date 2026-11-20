@@ -23,9 +23,38 @@ GitHub 维护者：JiangJie Zhang（yJader）。v1.0.0 使用 `local` 标识；v
 3. 确认版本号和 CHANGELOG 发布日期；打包文件名自动跟随 package.json 的版本号。
 4. 运行测试、打包并检查 VSIX 清单，在 VS Code 中验证安装及恢复。若声明 Remote SSH 已实测，先完成真实远端验证。
 5. 按确认的目标创建或连接 GitHub 仓库，提交并推送源码。
-6. 使用实际 publisher 授权发布到 Visual Studio Marketplace，核对原插件引用、许可和安装信息。
-7. 创建 GitHub Release 并附带 VSIX，记录两个实际发布链接。
+6. 配置 Marketplace Trusted Publishing 策略，核对原插件引用、许可和安装信息。
+7. 推送版本 tag，检查 Marketplace 版本和带 VSIX 附件的 GitHub Release。
+
+## 一次性授权
+
+打开 `jader` publisher，选择 **Trusted Publishing → Create**。 [Marketplace 管理页](https://marketplace.visualstudio.com/manage)
+
+| 字段 | 值 |
+| --- | --- |
+| Policy name | `Release tmux-restore-workspace` |
+| Repository owner | `yJader` |
+| Repository | `tmux-restore-workspace` |
+| Workflow | `publish.yml` |
+| Environment | 留空 |
+
+保存策略后，GitHub Actions 每次发布时通过 OIDC 换取短期 Marketplace 凭据。 [微软官方文档](https://code.visualstudio.com/api/working-with-extensions/publishing-extension#publish-with-github-actions-and-trusted-publishing)
+
+## 自动发布
+
+`.github/workflows/publish.yml` 会在推送 `v*` tag 时运行测试、打包、发布 Marketplace，并创建带 VSIX 附件的 GitHub Release。tag 必须与 `package.json` 的版本一致。
+
+提交要发布的改动后，在干净的 `main` 分支上更新版本和 CHANGELOG，然后一起推送发布提交和 tag。
+
+```sh
+npm version patch --no-git-tag-version
+# 更新 CHANGELOG.md 中的版本和日期。
+npm test
+git add package.json CHANGELOG.md
+tag="v$(node -p "require('./package.json').version")"
+git commit -m "Release $tag"
+git tag "$tag"
+git push --atomic origin main "refs/tags/$tag"
+```
 
 切换正式 publisher 后插件 ID 会变化。已有本地版本用户应卸载 `local.tmux-restore-workspace` 再安装正式版，避免两个衍生版本同时运行；原版也应保持禁用。
-
-认证信息通过本机凭据或环境变量提供，不写入源码、文档或仓库。

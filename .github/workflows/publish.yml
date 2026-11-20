@@ -1,0 +1,49 @@
+name: Publish VS Code extension
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check tag matches package version
+        shell: bash
+        run: |
+          tag_version="${GITHUB_REF_NAME#v}"
+          package_version="$(node -p "require('./package.json').version")"
+          test "$tag_version" = "$package_version"
+
+      - name: Run tests
+        run: npm test
+
+      - name: Package extension
+        shell: bash
+        run: |
+          name="$(node -p "require('./package.json').name")"
+          version="$(node -p "require('./package.json').version")"
+          vsix="${name}-${version}.vsix"
+          npx --yes @vscode/vsce@4.1.1 package --no-dependencies --out "$vsix"
+          echo "VSIX_PATH=$vsix" >> "$GITHUB_ENV"
+
+      - name: Publish to Visual Studio Marketplace
+        run: npx --yes @vscode/vsce@4.1.1 publish --oidc --packagePath "$VSIX_PATH" --skip-duplicate
+
+      - name: Create GitHub release
+        run: gh release create "$GITHUB_REF_NAME" "$VSIX_PATH" --title "$GITHUB_REF_NAME" --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}

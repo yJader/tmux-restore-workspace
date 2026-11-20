@@ -1,12 +1,53 @@
 name: Publish VS Code extension
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - 'v*'
 
 jobs:
+  verify-oidc:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Verify Marketplace Trusted Publishing
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { publisher } = require('./package.json');
+            const token = await core.getIDToken('marketplace.visualstudio.com');
+            const response = await fetch('https://marketplace.visualstudio.com/_apis/gallery/token?api-version=7.2-preview.1', {
+              method: 'POST',
+              headers: {
+                Accept: 'application/json',
+                Authorization: `FederatedToken ${token}`,
+                'Content-Type': 'application/json',
+                'User-Agent': 'vsce',
+              },
+              body: JSON.stringify({ publisherName: publisher }),
+              redirect: 'error',
+              signal: AbortSignal.timeout(30_000),
+            });
+            if (!response.ok) {
+              throw new Error(`Marketplace rejected OIDC for ${publisher} (HTTP ${response.status}).`);
+            }
+            const { credential } = await response.json();
+            if (typeof credential !== 'string' || !credential) {
+              throw new Error(`Marketplace returned no publishing credential for ${publisher}.`);
+            }
+            core.info(`Marketplace OIDC exchange succeeded for ${publisher}.`);
+
   publish:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write

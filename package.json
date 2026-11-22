@@ -2,7 +2,7 @@
 	"name": "tmux-restore-workspace",
 	"displayName": "Tmux Restore Workspace",
 	"description": "Restore only tmux sessions belonging to the current workspace.",
-	"version": "1.0.4",
+	"version": "1.0.5",
 	"publisher": "jader",
 	"author": {
 		"name": "JiangJie Zhang",

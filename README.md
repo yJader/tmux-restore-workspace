@@ -13,7 +13,9 @@
 
 ## 安装使用
 
-要求 VS Code 1.85+，工作区主机已安装 tmux 并可通过 `PATH` 找到。
+要求 VS Code 1.85+，工作区主机已安装 tmux。
+
+插件按扩展宿主 `PATH` 中的绝对目录查找 tmux，再尝试 `~/.local/bin`、`~/bin`、`~/.local/opt/tmux/bin`、Homebrew 等常见目录，使用第一个能列出会话的客户端。自定义安装目录也可以在 VS Code 的用户设置（Remote SSH 下为远程设置）中通过 `tmuxRestoreWorkspace.tmuxPath` 指定可执行文件的绝对路径。
 
 1. 停用原插件 `FFDFFD.tmux-restore-all`；若装过本地版 `local.tmux-restore-workspace`，也需卸载或停用。
 2. 从 [GitHub Releases](https://github.com/yJader/tmux-restore-workspace/releases) 下载 VSIX，通过 **Install from VSIX...** 安装，然后重新加载窗口。

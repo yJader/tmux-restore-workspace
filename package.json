@@ -2,7 +2,7 @@
 	"name": "tmux-restore-workspace",
 	"displayName": "Tmux Restore Workspace",
 	"description": "Restore only tmux sessions belonging to the current workspace.",
-	"version": "1.0.1",
+	"version": "1.0.4",
 	"publisher": "jader",
 	"author": {
 		"name": "JiangJie Zhang",
@@ -42,6 +42,17 @@
 		"package": "npx @vscode/vsce package"
 	},
 	"contributes": {
+		"configuration": {
+			"title": "Tmux Restore Workspace",
+			"properties": {
+				"tmuxRestoreWorkspace.tmuxPath": {
+					"type": "string",
+					"default": "",
+					"scope": "machine",
+					"description": "Absolute path to the tmux executable on the workspace host. Leave empty to detect a compatible client using PATH and common install locations."
+				}
+			}
+		},
 		"commands": [
 			{
 				"command": "tmuxRestoreWorkspace.openAll",

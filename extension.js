@@ -1,5 +1,9 @@
 const vscode = require("vscode");
 const { execFile } = require("child_process");
+const { constants } = require("fs");
+const { access } = require("fs/promises");
+const { homedir } = require("os");
+const { delimiter, isAbsolute, join } = require("path");
 const { parseWorkspaceSessions } = require("./workspace-sessions");
 
 const COMMAND_OPEN_ALL = "tmuxRestoreWorkspace.openAll";
@@ -8,95 +12,97 @@ const COMMAND_RENAME_SESSION = "tmuxRestoreWorkspace.renameSession";
 const COMMAND_KILL_SESSION = "tmuxRestoreWorkspace.killSession";
 const COMMAND_REFRESH = "tmuxRestoreWorkspace.refresh";
 const VIEW_SESSIONS = "tmuxRestoreWorkspace.sessions";
+const LIST_PANES_ARGS = [
+  "list-panes",
+  "-a",
+  "-F",
+  "#{session_id}\t#{session_name}\t#{session_windows}\t#{session_attached}\t#{session_path}\t#{pane_current_path}",
+];
 const launchedTerminals = new Map();
 let sessionProvider;
 let autoRestoreTimer;
 
-function listTmuxSessions() {
-  const directories = (vscode.workspace.workspaceFolders || [])
-    .filter((folder) => ["file", "vscode-remote"].includes(folder.uri.scheme))
-    .map((folder) => folder.uri.fsPath);
-  if (directories.length === 0) return Promise.resolve([]);
+function tmuxCandidates() {
+  const home = homedir();
+  const directories = [
+    ...(process.env.PATH || "").split(delimiter),
+    join(home, ".local", "bin"),
+    join(home, "bin"),
+    join(home, ".local", "opt", "tmux", "bin"),
+    "/opt/homebrew/bin",
+    "/home/linuxbrew/.linuxbrew/bin",
+    "/usr/local/bin",
+    "/opt/local/bin",
+    "/usr/bin",
+    "/bin",
+  ];
+  return new Set(directories.filter(isAbsolute).map((dir) => join(dir, "tmux")));
+}
+
+function runTmux(executable, args) {
   return new Promise((resolve, reject) => {
     execFile(
-      "tmux",
-      [
-        "list-panes",
-        "-a",
-        "-F",
-        "#{session_id}\t#{session_name}\t#{session_windows}\t#{session_attached}\t#{session_path}\t#{pane_current_path}",
-      ],
+      executable,
+      args,
       { encoding: "utf8", timeout: 5000 },
       (error, stdout, stderr) => {
         if (error) {
-          const message = `${stderr || error.message}`.trim();
-          if (
-            message.includes("no server running")
-            || message.includes("no sessions")
-          ) {
-            resolve([]);
-            return;
-          }
-
-          if (error.code === "ENOENT") {
-            reject(new Error("tmux was not found on the workspace host."));
-            return;
-          }
-
-          reject(new Error(message));
+          reject(new Error((stderr || "").trim() || error.message));
           return;
         }
 
-        resolve(parseWorkspaceSessions(stdout, directories));
+        resolve(stdout);
       },
     );
   });
 }
 
-function renameTmuxSession(oldName, newName) {
-  return new Promise((resolve, reject) => {
-    execFile(
-      "tmux",
-      ["rename-session", "-t", `=${oldName}`, newName],
-      { encoding: "utf8", timeout: 5000 },
-      (error, _stdout, stderr) => {
-        if (!error) {
-          resolve();
-          return;
-        }
-
-        if (error.code === "ENOENT") {
-          reject(new Error("tmux was not found on the workspace host."));
-          return;
-        }
-
-        reject(new Error(`${stderr || error.message}`.trim()));
-      },
+function hasNoTmuxSessions(message) {
+  return message.includes("no server running")
+    || message.includes("no sessions")
+    || (
+      message.includes("error connecting to ")
+      && message.includes("(No such file or directory)")
     );
-  });
 }
 
-function killTmuxSession(sessionName) {
-  return new Promise((resolve, reject) => {
-    execFile(
-      "tmux",
-      ["kill-session", "-t", `=${sessionName}`],
-      { encoding: "utf8", timeout: 5000 },
-      (error, _stdout, stderr) => {
-        if (!error) {
-          resolve();
-          return;
-        }
+async function listTmuxSessions() {
+  const directories = (vscode.workspace.workspaceFolders || [])
+    .filter((folder) => ["file", "vscode-remote"].includes(folder.uri.scheme))
+    .map((folder) => folder.uri.fsPath);
+  if (directories.length === 0) return { sessions: [] };
 
-        if (error.code === "ENOENT") {
-          reject(new Error("tmux was not found on the workspace host."));
-          return;
-        }
+  const configured = vscode.workspace.getConfiguration("tmuxRestoreWorkspace").get("tmuxPath");
+  if (configured && !isAbsolute(configured)) {
+    throw new Error("tmuxRestoreWorkspace.tmuxPath must be an absolute path on the workspace host.");
+  }
 
-        reject(new Error(`${stderr || error.message}`.trim()));
-      },
-    );
-  });
+  let noSessions = false;
+  let firstFailure;
+  for (const executable of configured ? [configured] : tmuxCandidates()) {
+    if (!configured) {
+      try {
+        await access(executable, constants.X_OK);
+      } catch {
+        continue;
+      }
+    }
+
+    try {
+      const stdout = await runTmux(executable, LIST_PANES_ARGS);
+      return { executable, sessions: parseWorkspaceSessions(stdout, directories) };
+    } catch (error) {
+      if (hasNoTmuxSessions(error.message)) {
+        noSessions = true;
+      } else {
+        firstFailure ??= new Error(`${executable}: ${error.message}`);
+      }
+    }
+  }
+
+  if (noSessions) return { sessions: [] };
+  if (firstFailure) throw firstFailure;
+  throw new Error("tmux was not found on the workspace host. Set tmuxRestoreWorkspace.tmuxPath to its absolute path.");
 }
 
 class TmuxSessionItem extends vscode.TreeItem {
@@ -142,7 +148,7 @@ class TmuxSessionProvider {
       return [];
     }
 
-    const sessions = await listTmuxSessions();
+    const { sessions } = await listTmuxSessions();
     return sessions.map((session) => new TmuxSessionItem(session));
   }
 
@@ -168,7 +174,11 @@ function findOpenTerminal(sessionName) {
   return matchingTerminal;
 }
 
-function createTmuxTerminal(sessionName) {
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
+
+function createTmuxTerminal(executable, sessionName) {
   const workspaceFolders = vscode.workspace.workspaceFolders;
   const cwd = workspaceFolders && workspaceFolders.length > 0
     ? workspaceFolders[0].uri
@@ -176,24 +186,29 @@ function createTmuxTerminal(sessionName) {
 
   const terminal = vscode.window.createTerminal({
     name: sessionName,
-    shellPath: "tmux",
-    shellArgs: ["attach-session", "-t", `=${sessionName}`],
     cwd,
     env: { TMUX: null },
     iconPath: new vscode.ThemeIcon("terminal-tmux"),
     location: vscode.TerminalLocation.Panel,
+    // The extension reattaches tmux sessions when a remote window reloads.
+    isTransient: Boolean(vscode.env.remoteName),
   });
 
+  // Keep the user's shell as the terminal process so VS Code can provide
+  // Shell Integration data to extensions that consume terminal output.
+  terminal.sendText(
+    `${shellQuote(executable)} attach-session -t ${shellQuote(`=${sessionName}`)}`,
+  );
   launchedTerminals.set(sessionName, terminal);
   return terminal;
 }
 
-function openTmuxSession(sessionName, show = true, refresh = true) {
+function openTmuxSession(executable, sessionName, show = true, refresh = true) {
   let terminal = findOpenTerminal(sessionName);
   const created = !terminal;
 
   if (!terminal) {
-    terminal = createTmuxTerminal(sessionName);
+    terminal = createTmuxTerminal(executable, sessionName);
   }
 
   if (show) {
@@ -216,9 +231,9 @@ async function renameSession(target) {
     return;
   }
 
-  let sessions;
+  let listed;
   try {
-    sessions = await listTmuxSessions();
+    listed = await listTmuxSessions();
   } catch (error) {
     vscode.window.showErrorMessage(
       `Unable to list tmux sessions: ${error.message}`,
@@ -226,7 +241,7 @@ async function renameSession(target) {
     return;
   }
 
-  const existingNames = new Set(sessions.map((session) => session.name));
+  const existingNames = new Set(listed.sessions.map((session) => session.name));
   if (!existingNames.has(oldName)) return;
   const newName = await vscode.window.showInputBox({
     prompt: `Rename tmux session "${oldName}"`,
@@ -251,7 +266,7 @@ async function renameSession(target) {
   }
 
   try {
-    await renameTmuxSession(oldName, newName);
+    await runTmux(listed.executable, ["rename-session", "-t", `=${oldName}`, newName]);
   } catch (error) {
     vscode.window.showErrorMessage(
       `Unable to rename tmux session "${oldName}": ${error.message}`,
@@ -312,8 +327,9 @@ async function killSession(target) {
   }
 
   try {
-    if (!(await listTmuxSessions()).some((session) => session.name === sessionName)) return;
-    await killTmuxSession(sessionName);
+    const { executable, sessions } = await listTmuxSessions();
+    if (!sessions.some((session) => session.name === sessionName)) return;
+    await runTmux(executable, ["kill-session", "-t", `=${sessionName}`]);
   } catch (error) {
     vscode.window.showErrorMessage(
       `Unable to kill tmux session "${sessionName}": ${error.message}`,
@@ -336,10 +352,10 @@ async function killSession(target) {
 }
 
 async function openAllTmuxSessions() {
-  let sessions;
+  let listed;
 
   try {
-    sessions = await listTmuxSessions();
+    listed = await listTmuxSessions();
   } catch (error) {
     vscode.window.showErrorMessage(
       `Unable to list tmux sessions: ${error.message}`,
@@ -347,13 +363,14 @@ async function openAllTmuxSessions() {
     return;
   }
 
+  const { executable, sessions } = listed;
   if (sessions.length === 0) {
     vscode.window.showInformationMessage("No tmux sessions belong to the current workspace.");
     return;
   }
 
   const opened = sessions.map(
-    (session) => openTmuxSession(session.name, false, false),
+    (session) => openTmuxSession(executable, session.name, false, false),
   );
   opened[0].terminal.show(false);
   if (sessionProvider) {
@@ -391,13 +408,19 @@ function activate(context) {
         const sessionName = typeof target === "string"
           ? target
           : target && (target.sessionName || target.label);
-        if (!(await listTmuxSessions()).some((session) => session.name === sessionName)) return;
-        return openTmuxSession(sessionName, true);
+        const { executable, sessions } = await listTmuxSessions();
+        if (!sessions.some((session) => session.name === sessionName)) return;
+        return openTmuxSession(executable, sessionName, true);
       },
     ),
     vscode.commands.registerCommand(COMMAND_RENAME_SESSION, renameSession),
     vscode.commands.registerCommand(COMMAND_KILL_SESSION, killSession),
     vscode.workspace.onDidChangeWorkspaceFolders(() => sessionProvider.refresh()),
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration("tmuxRestoreWorkspace.tmuxPath")) {
+        sessionProvider.refresh();
+      }
+    }),
     vscode.commands.registerCommand(
       COMMAND_REFRESH,
       () => sessionProvider.refresh(),
